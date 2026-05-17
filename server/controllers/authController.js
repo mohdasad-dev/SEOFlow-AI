@@ -33,7 +33,7 @@ export const register = async(req, res) => {
 
         // create user
 
-        const user = await User.create({name, email, password: password.hashedPassword});
+        const user = await User.create({name, email, password: hashedPassword});
 
         const token = generateToken(user._id);
 
@@ -87,13 +87,13 @@ export const login = async(req, res) => {
 
 export const getUser = async(req, res) => {
     try {
-        const user = await User.findById(req._userId).select("-password");
+        const user = await User.findById(req.userId).select("-password");
 
         if(!user){
             return res.status(400).json({success:false, message: "User Not found"});
         }
 
-        res.json({success, user});
+        res.json({success:true, user});
 
     } catch (error) {
         console.error("Get user error: ", error.message);
