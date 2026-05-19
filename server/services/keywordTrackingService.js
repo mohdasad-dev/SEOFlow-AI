@@ -7,14 +7,40 @@ export async function keywordTracking(tracking) {
 
         // Try up to 2 times for reliability.
 
-        for(let attempt = 1; attempt <= 2; attempt++){
-            result = await rankTracker(tracking.keyword, tracking.domain);
-            if(result.success && result.data.totalResultsScanned > 0) break;
+        // for(let attempt = 1; attempt <= 2; attempt++){
+        //     result = await rankTracker(tracking.keyword, tracking.domain);
+        //     if(result.success && result.data.totalResultsScanned > 0) break;
 
-            if(attempt < 2) await new Promise((r) => setTimeout((r, result.success ? 3000 : 5000)))
+        //     if(attempt < 2) await new Promise((r) => setTimeout((r, result.success ? 3000 : 5000)))
+        // }
+        for (let attempt = 1; attempt <= 2; attempt++) {
+
+            result = await rankTracker(
+                tracking.keyword,
+                tracking.domain
+            );
+        
+            console.log("TRACK RESULT:", result);
+        
+            if (
+                result?.success &&
+                result?.data?.totalResultsScanned > 0
+            ) {
+                break;
+            }
+        
+            if (attempt < 2) {
+        
+                await new Promise((resolve) =>
+                    setTimeout(
+                        resolve,
+                        result?.success ? 3000 : 5000
+                    )
+                );
+            }
         }
 
-        if(result.success){
+        if(result?.success){
             const prev = tracking.currentPosition;
             const today = new Date();
             today.setHours(0,0,0,0);
