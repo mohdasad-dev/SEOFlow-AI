@@ -112,21 +112,33 @@ export async function analyzeSeoData(scrapedData) {
 
 
         const response = await ai.models.generateContent({
-            model: 'gemma-4-31b-it',
-            contents: [{role: "user", parts: [{text: prompt}]}],
-            config:{
+            // model: 'gemma-4-31b-it',
+            model: 'gemini-2.5-flash',
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: {
                 responseMimeType: "application/json",
                 responseSchema: seoAnalysisSchema,
             }
         })
 
-        const analysis = JSON.parse(response.text);
+        // const analysis = JSON.parse(response.text());
 
-        return {success: true, data: analysis};
+        const text =
+            response.candidates?.[0]
+                ?.content?.parts?.[0]
+                ?.text;
+
+        if (!text) {
+            throw new Error("Empty Gemini response");
+        }
+
+        console.log("GEMINI RESPONSE:", text);
+        const analysis = JSON.parse(text);
+        return { success: true, data: analysis };
 
     } catch (error) {
         console.error("Gemini Analysis error:", error.message);
 
-        return {success:false, error: error.message};
+        return { success: false, error: error.message };
     }
 }

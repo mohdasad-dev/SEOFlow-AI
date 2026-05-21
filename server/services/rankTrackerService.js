@@ -134,80 +134,78 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import { chromium } from "playwright-core";
-import Browserbase from "@browserbasehq/sdk";
-
-const bb = new Browserbase({
-    apiKey: process.env.BROWSERBASE_API_KEY,
-});
+import { chromium } from "playwright";
 
 // Search Google for keyword and extract ranking results
-export async function rankTracker(keyword, targetDomain) {
 
+export async function rankTracker(
+    keyword,
+    targetDomain
+) {
     let browser;
 
     try {
 
-        // 1. Create Browserbase session
+        // Launch local browser
 
-        const session = await bb.sessions.create({
-            browserSettings: {
-                blockAds: true,
-            },
+        browser = await chromium.launch({
+            headless: true,
         });
 
-        browser = await chromium.connectOverCDP(
-            session.connectUrl
-        );
+        // Create browser context
+
+        const context =
+            await browser.newContext({
+                viewport: {
+                    width: 1440,
+                    height: 900,
+                },
+
+                userAgent:
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            });
+
+        // Create page
 
         const page =
-            browser.contexts()[0].pages()[0];
+            await context.newPage();
 
-        // Faster timeout
-        page.setDefaultNavigationTimeout(15000);
+        // Timeout settings
 
-        // 2. Open Google
+        page.setDefaultNavigationTimeout(
+            30000
+        );
+
+        page.setDefaultTimeout(
+            15000
+        );
+
+        // Open Google homepage first
 
         await page.goto(
             "https://www.google.com",
             {
-                waitUntil: "domcontentloaded",
+                waitUntil:
+                    "domcontentloaded",
             }
         );
 
-        // Handle consent popup if exists
+        // Handle consent popup
 
         try {
 
-            const btn = await page.$(
-                'button[id="L2AGLb"], form[action*="consent"] button'
-            );
+            const btn =
+                await page.$(
+                    'button[id="L2AGLb"], form[action*="consent"] button'
+                );
 
             if (btn) {
 
                 await btn.click();
 
-                await page.waitForTimeout(500);
+                await page.waitForTimeout(
+                    1000
+                );
             }
 
         } catch {}
@@ -216,168 +214,232 @@ export async function rankTracker(keyword, targetDomain) {
 
         let allResults = [];
 
-        const cleanTarget = targetDomain
-            .replace("www.", "")
-            .toLowerCase();
+        const cleanTarget =
+            targetDomain
+                .replace("www.", "")
+                .toLowerCase();
 
-        // 3. Scan Google result pages
+        // Scan Google pages
 
-        for (let gPage = 0; gPage < 3; gPage++) {
+        for (
+            let gPage = 0;
+            gPage < 3;
+            gPage++
+        ) {
 
             const searchUrl =
-                `https://www.google.com/search?q=${encodeURIComponent(keyword)}&start=${gPage * 10}&num=10&hl=en&gl=us`;
+                `https://www.google.com/search?q=${encodeURIComponent(
+                    keyword
+                )}&start=${gPage * 10}&num=10&hl=en&gl=us`;
 
-            await page.goto(searchUrl, {
-                waitUntil: "domcontentloaded",
-            });
+            await page.goto(
+                searchUrl,
+                {
+                    waitUntil:
+                        "domcontentloaded",
+
+                    timeout: 30000,
+                }
+            );
 
             let pageResults = [];
 
-            // Retry extraction up to 2 times
+            // Retry extraction
 
-            for (let retry = 0; retry < 2; retry++) {
+            for (
+                let retry = 0;
+                retry < 2;
+                retry++
+            ) {
 
                 try {
 
-                    await page.waitForSelector("h3", {
-                        timeout: 5000,
-                    });
+                    await page.waitForSelector(
+                        "h3",
+                        {
+                            timeout: 5000,
+                        }
+                    );
 
-                    await page.waitForTimeout(500);
+                    await page.waitForTimeout(
+                        1000
+                    );
 
-                    pageResults = await page.evaluate(() => {
+                    pageResults =
+                        await page.evaluate(
+                            () => {
 
-                        return Array.from(
-                            document.querySelectorAll("h3")
-                        )
-                            .map((h3) => {
+                                return Array.from(
+                                    document.querySelectorAll(
+                                        "h3"
+                                    )
+                                )
+                                    .map(
+                                        (
+                                            h3
+                                        ) => {
 
-                                let a = h3.closest("a");
-
-                                // Fallback anchor search
-
-                                if (!a) {
-
-                                    let p =
-                                        h3.parentElement;
-
-                                    for (
-                                        let j = 0;
-                                        j < 5 && p;
-                                        j++, p = p.parentElement
-                                    ) {
-
-                                        if (
-                                            p.tagName === "A"
-                                        ) {
-
-                                            a = p;
-
-                                            break;
-                                        }
-
-                                        const sub =
-                                            p.querySelector(
-                                                "a[href]"
-                                            );
-
-                                        if (
-                                            sub &&
-                                            sub.contains(h3)
-                                        ) {
-
-                                            a = sub;
-
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                // Skip invalid links
-
-                                if (
-                                    !a ||
-                                    !a.href.startsWith("http") ||
-                                    a.href.includes("google.")
-                                ) {
-                                    return null;
-                                }
-
-                                // Extract snippet
-
-                                let snippet = "";
-
-                                let c =
-                                    a.parentElement;
-
-                                for (
-                                    let j = 0;
-                                    j < 6 && c;
-                                    j++, c = c.parentElement
-                                ) {
-
-                                    const txt =
-                                        c.innerText || "";
-
-                                    if (
-                                        txt.length >
-                                        h3.innerText.length + 50
-                                    ) {
-
-                                        snippet =
-                                            (
-                                                txt
-                                                    .split("\n")
-                                                    .find(
-                                                        (l) =>
-                                                            l.length > 30 &&
-                                                            !l.includes(
-                                                                h3.innerText.substring(
-                                                                    0,
-                                                                    20
-                                                                )
-                                                            )
-                                                    ) || ""
-                                            )
-                                                .trim()
-                                                .substring(
-                                                    0,
-                                                    300
+                                            let a =
+                                                h3.closest(
+                                                    "a"
                                                 );
 
-                                        if (snippet)
-                                            break;
-                                    }
-                                }
+                                            if (
+                                                !a
+                                            ) {
 
-                                return {
-                                    url: a.href,
-                                    domain:
-                                        new URL(
-                                            a.href
-                                        ).hostname.replace(
-                                            "www.",
-                                            ""
-                                        ),
-                                    title:
-                                        h3.innerText.trim(),
-                                    snippet,
-                                };
-                            })
-                            .filter(Boolean);
-                    });
+                                                let p =
+                                                    h3.parentElement;
 
-                    // Success
+                                                for (
+                                                    let j = 0;
+                                                    j < 5 &&
+                                                    p;
+                                                    j++,
+                                                        p =
+                                                            p.parentElement
+                                                ) {
 
-                    if (pageResults.length > 0) {
+                                                    if (
+                                                        p.tagName ===
+                                                        "A"
+                                                    ) {
+
+                                                        a =
+                                                            p;
+
+                                                        break;
+                                                    }
+
+                                                    const sub =
+                                                        p.querySelector(
+                                                            "a[href]"
+                                                        );
+
+                                                    if (
+                                                        sub &&
+                                                        sub.contains(
+                                                            h3
+                                                        )
+                                                    ) {
+
+                                                        a =
+                                                            sub;
+
+                                                        break;
+                                                    }
+                                                }
+                                            }
+
+                                            if (
+                                                !a ||
+                                                !a.href.startsWith(
+                                                    "http"
+                                                ) ||
+                                                a.href.includes(
+                                                    "google."
+                                                )
+                                            ) {
+
+                                                return null;
+                                            }
+
+                                            let snippet =
+                                                "";
+
+                                            let c =
+                                                a.parentElement;
+
+                                            for (
+                                                let j = 0;
+                                                j < 6 &&
+                                                c;
+                                                j++,
+                                                    c =
+                                                        c.parentElement
+                                            ) {
+
+                                                const txt =
+                                                    c.innerText ||
+                                                    "";
+
+                                                if (
+                                                    txt.length >
+                                                    h3.innerText.length +
+                                                        50
+                                                ) {
+
+                                                    snippet =
+                                                        (
+                                                            txt
+                                                                .split(
+                                                                    "\n"
+                                                                )
+                                                                .find(
+                                                                    (
+                                                                        l
+                                                                    ) =>
+                                                                        l.length >
+                                                                            30 &&
+                                                                        !l.includes(
+                                                                            h3.innerText.substring(
+                                                                                0,
+                                                                                20
+                                                                            )
+                                                                        )
+                                                                ) ||
+                                                            ""
+                                                        )
+                                                            .trim()
+                                                            .substring(
+                                                                0,
+                                                                300
+                                                            );
+
+                                                    if (
+                                                        snippet
+                                                    )
+                                                        break;
+                                                }
+                                            }
+
+                                            return {
+                                                url: a.href,
+
+                                                domain:
+                                                    new URL(
+                                                        a.href
+                                                    ).hostname.replace(
+                                                        "www.",
+                                                        ""
+                                                    ),
+
+                                                title:
+                                                    h3.innerText.trim(),
+
+                                                snippet,
+                                            };
+                                        }
+                                    )
+                                    .filter(
+                                        Boolean
+                                    );
+                            }
+                        );
+
+                    if (
+                        pageResults.length >
+                        0
+                    ) {
+
                         break;
                     }
 
-                } catch (error) {
+                } catch {
 
-                    // Retry on failure
-
-                    if (retry < 1) {
+                    if (
+                        retry < 1
+                    ) {
 
                         await page.waitForTimeout(
                             1000
@@ -388,13 +450,16 @@ export async function rankTracker(keyword, targetDomain) {
                 }
             }
 
-            // Skip failed page instead of stopping entire scan
+            // Skip failed page
 
-            if (!pageResults.length) {
+            if (
+                !pageResults.length
+            ) {
+
                 continue;
             }
 
-            // 4. Process results
+            // Process results
 
             for (const r of pageResults) {
 
@@ -403,14 +468,16 @@ export async function rankTracker(keyword, targetDomain) {
 
                 allResults.push(r);
 
-                // Match target domain
+                // Match domain
 
                 if (
                     !found &&
                     (
                         r.domain
                             .toLowerCase()
-                            .includes(cleanTarget) ||
+                            .includes(
+                                cleanTarget
+                            ) ||
                         cleanTarget.includes(
                             r.domain.toLowerCase()
                         )
@@ -419,7 +486,8 @@ export async function rankTracker(keyword, targetDomain) {
 
                     found = {
                         ...r,
-                        page: gPage + 1,
+                        page:
+                            gPage + 1,
                     };
                 }
             }
@@ -427,46 +495,76 @@ export async function rankTracker(keyword, targetDomain) {
             // Stop early if found
 
             if (found) {
+
                 break;
             }
 
-            // Human-like delay
+            // Human delay
 
             await page.waitForTimeout(
-                500 + Math.random() * 1000
+                1000 +
+                    Math.random() *
+                        1500
             );
         }
 
-        // 5. Extract competitors
+        // Competitors
 
-        const competitors = allResults
-            .filter(
-                (r) =>
-                    !r.domain
-                        .toLowerCase()
-                        .includes(cleanTarget) &&
-                    !cleanTarget.includes(
-                        r.domain.toLowerCase()
-                    )
-            )
-            .slice(0, 10);
+        const competitors =
+            allResults
+                .filter(
+                    (r) =>
+                        !r.domain
+                            .toLowerCase()
+                            .includes(
+                                cleanTarget
+                            ) &&
+                        !cleanTarget.includes(
+                            r.domain.toLowerCase()
+                        )
+                )
+                .slice(0, 10);
 
-        // 6. Return result
+        // Cleanup
+
+        await page.close().catch(
+            () => {}
+        );
+
+        await browser
+            .close()
+            .catch(() => {});
+
+        browser = null;
+
+        // Return result
 
         return {
             success: true,
+
             data: {
                 keyword,
+
                 targetDomain,
+
                 position:
-                    found?.position || null,
+                    found?.position ||
+                    null,
+
                 page:
-                    found?.page || null,
+                    found?.page ||
+                    null,
+
                 title:
-                    found?.title || "",
+                    found?.title ||
+                    "",
+
                 snippet:
-                    found?.snippet || "",
+                    found?.snippet ||
+                    "",
+
                 competitors,
+
                 totalResultsScanned:
                     allResults.length,
             },
@@ -474,19 +572,10 @@ export async function rankTracker(keyword, targetDomain) {
 
     } catch (error) {
 
-        console.log(
-            "Rank Check error:",
-            error.message
+        console.error(
+            "Rank Tracker Error:",
+            error
         );
-
-        return {
-            success: false,
-            error: error.message,
-        };
-
-    } finally {
-
-        // Always close browser
 
         if (browser) {
 
@@ -494,5 +583,10 @@ export async function rankTracker(keyword, targetDomain) {
                 .close()
                 .catch(() => {});
         }
+
+        return {
+            success: false,
+            error: error.message,
+        };
     }
 }
