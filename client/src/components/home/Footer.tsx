@@ -11,7 +11,7 @@ export default function Footer() {
                     <div className="col-span-2">
                         <div className="flex items-center gap-2 mb-4">
                             <ChartNoAxesColumnIcon className="text-primary" />
-                            <span className="text-xl">Rank Pilot</span>
+                            <span className="text-xl">SEOFlow-AI</span>
                         </div>
                         <p className="text-sm text-muted-foreground mb-6 w-5/6">Optimize your website for search engines with AI-powered insights and real-time tracking.</p>
                         <div className="flex items-center gap-4">
@@ -47,7 +47,7 @@ export default function Footer() {
                 </div>
 
                 <div className="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
-                    <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} RankPilot. All rights reserved.</p>
+                    <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} SEOFlow-AI. All rights reserved.</p>
                     <div className="flex items-center gap-6">
                         <span className="text-xs text-muted-foreground">Status: All Systems Operational</span>
                     </div>
